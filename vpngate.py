@@ -26,9 +26,10 @@ import os
 import re
 import sys
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import requests
 
@@ -307,6 +308,65 @@ def classify_network(host, exit_org, is_datacenter=None):
     return "unknown"
 
 
+def worker_failure(out, category, message, http_status=None):
+    """只记录固定错误类别和安全提示，不保留异常文本、响应正文或请求 URL。"""
+    out.update(success=False, error=message, worker_error=True, worker_error_type=category)
+    if http_status is not None:
+        out["worker_http_status"] = http_status
+    return out
+
+
+def log_worker_errors(errors):
+    """限量汇总检测服务错误；只显示主机名，不显示查询参数和代理凭据。"""
+    if not errors:
+        return
+    try:
+        hostname = urlsplit(WORKER_CHECK_URL).hostname or "未知主机"
+    except ValueError:
+        hostname = "无效主机配置"
+    allowed = {"HTTPError", "InvalidJSON", "InvalidResponse", "Timeout", "SSLError",
+               "ConnectionError", "RequestException", "UnexpectedError"}
+    categories = Counter(
+        r.get("worker_error_type") if r.get("worker_error_type") in allowed else "UnexpectedError"
+        for r in errors
+    )
+    statuses = Counter(
+        str(r["worker_http_status"])
+        if type(r.get("worker_http_status")) is int and 100 <= r["worker_http_status"] <= 599
+        else "无 HTTP 响应"
+        for r in errors
+    )
+
+    def limited_counts(counts):
+        items = counts.most_common(5)
+        text = ", ".join(f"{name}={count}" for name, count in items)
+        remainder = sum(counts.values()) - sum(count for _, count in items)
+        return text + (f", 其他={remainder}" if remainder else "")
+
+    log("CLOUDFLARE WORKER", f"检测服务主机: {hostname}")
+    log("CLOUDFLARE WORKER", f"Worker HTTP 状态: {limited_counts(statuses)}")
+    log("CLOUDFLARE WORKER", f"Worker 异常类别: {limited_counts(categories)}")
+    hints = []
+    if any(s in statuses for s in ("400", "404")):
+        hints.append("HTTP 400/404: 核对检测接口参数和 Worker 路由")
+    if any(s in statuses for s in ("401", "403")):
+        hints.append("HTTP 401/403: 检测服务拒绝访问，核对服务访问策略")
+    if "429" in statuses:
+        hints.append("HTTP 429: 检测服务限流")
+    if any(s.isdigit() and int(s) >= 500 for s in statuses):
+        hints.append("HTTP 5xx: 检测服务返回服务端错误")
+    if "InvalidJSON" in categories or "InvalidResponse" in categories:
+        hints.append("响应不是预期检测 JSON，核对接口和重定向/HTML 页面")
+    if "SSLError" in categories:
+        hints.append("TLS 握手或证书校验失败")
+    if "ConnectionError" in categories:
+        hints.append("连接失败，核对检测主机的 DNS 和网络可达性")
+    if "Timeout" in categories:
+        hints.append("检测服务请求超时")
+    for hint in hints[:3]:
+        log("CLOUDFLARE WORKER", hint)
+
+
 def check_one(node, session):
     """调用 Worker 检测单节点。返回节点+检测结果的合并 dict。
     单节点失败 (网络错误/非 200/坏 JSON) 不会抛出, 统一记 success=False。"""
@@ -318,19 +378,24 @@ def check_one(node, session):
     out["checked_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     out["exit"] = None
     out["residential"] = "unknown"
+    http_status = None
     try:
         r = session.get(url, timeout=CHECK_TIMEOUT, headers={"User-Agent": "Mozilla/5.0 (gate-checker)"})
+        http_status = r.status_code
         if r.status_code != 200:
-            out["error"] = f"HTTP {r.status_code}"
-            out["worker_error"] = True
-            return out
-        j = r.json()
-        ok = bool(j.get("success"))
+            return worker_failure(out, "HTTPError", f"HTTP {r.status_code}", r.status_code)
+        try:
+            j = r.json()
+        except ValueError:
+            return worker_failure(out, "InvalidJSON", "Worker 响应不是有效 JSON", r.status_code)
+        if not isinstance(j, dict) or not isinstance(j.get("success"), bool):
+            return worker_failure(out, "InvalidResponse", "Worker JSON 缺少布尔 success 字段", r.status_code)
+        ok = j["success"]
         out["success"] = ok
         out["status"] = "success" if ok else "failed"
         out["latency_ms"] = j.get("responseTime")
         out["colo"] = j.get("colo")
-        out["error"] = (None if ok else (j.get("error") or j.get("message") or "check failed"))
+        out["error"] = None if ok else "SSTP 节点检测失败 (Worker 返回 success=false)"
         # SSTP 版 Worker: 顶层直接返回 exit, 含真实 is_datacenter 标志 + 嵌套 asn 对象
         exit_info = j.get("exit") or {}
         if exit_info:
@@ -351,10 +416,16 @@ def check_one(node, session):
         else:
             out["residential"] = classify_network(out["host"], None, None)
         return out
-    except Exception as exc:
-        out["error"] = f"{type(exc).__name__}: {exc}"
-        out["worker_error"] = True
-        return out
+    except requests.exceptions.Timeout:
+        return worker_failure(out, "Timeout", "Worker 请求超时", http_status)
+    except requests.exceptions.SSLError:
+        return worker_failure(out, "SSLError", "Worker TLS 握手或证书校验失败", http_status)
+    except requests.exceptions.ConnectionError:
+        return worker_failure(out, "ConnectionError", "Worker 连接失败", http_status)
+    except requests.exceptions.RequestException:
+        return worker_failure(out, "RequestException", "Worker HTTP 请求异常", http_status)
+    except Exception:
+        return worker_failure(out, "UnexpectedError", "Worker 响应处理异常", http_status)
 
 
 def check_all(nodes, session):
@@ -677,10 +748,11 @@ def main():
     log("CLOUDFLARE WORKER", f"检测成功: {len(success)}")
     log("CLOUDFLARE WORKER", f"检测失败: {len(failed)}" + (f" (其中 Worker 异常 {len(worker_errors)})" if worker_errors else ""))
     log("CLOUDFLARE WORKER", f"耗时: {elapsed:.1f}s")
+    log_worker_errors(worker_errors)
 
     # 硬性失败: Worker 完全不可达 (没有任何一个请求拿到正常响应)
     if uniq and not success and len(worker_errors) == len(uniq):
-        die("Worker 全部请求异常, 检测服务不可用 — 本次运行判定失败 (不生成空结果)")
+        die("Worker 全部请求异常，原因见上方脱敏统计 — 本次运行判定失败 (不生成空结果)")
 
     # 4) 结果 + 网页
     data = build_outputs(results, raw_count, sstp_count, source)
