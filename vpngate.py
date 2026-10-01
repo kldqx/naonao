@@ -460,7 +460,7 @@ EDGE_HOSTS = [
     h.strip()
     for h in os.environ.get(
         "EDGE_HOSTS",
-        "buyshoes.shop:443,hentaiverse.org:443,www.botafogo.com.br:443,duggal.com:443,ip.sb:443,cdn.cnno.de:443,saas.sin.fan:443,cdn.ctn32.us.kg:443,cloudflare-ip.mofashi.ltd:443,emos.best:443,www.trumpgolf.com:443,www.scayle.com:443,www.elysee.fr:443,www.timbuktutravel.com:443,vps.cheng2001.top:443,www.loc.gov:443,xn--b6gac.eu.org:443,lt.1930812.xyz:443,egov.uscis.gov:443,www.bangbenjiaju.com:443,www.trumpinternationalrealty.com:443,gitlab.com:443,www.ntu.edu.sg:443,www.trumpstruth.org:443,www.npmjs.com:443,prizepicks.com:443,icook.hk:443,deepseek.com.hk:443,www.whatismyip.com:443,www.moc.gov.tw:443,dynadot.com:443,img.css.sd:443,www.xiaoshuofen.com:443,cf.drxian.dpdns.org:443,2x.nz:443,nist.gov:443,www.sloomb.com:443,cdnjs.loli.net:443,snipaste1.speedip.eu.org:443,upfile.live:443,cf.0sm.com:443,saas.072159.xyz:443,funko.com:443,99.co:443,www.hugedomains.com:443,newsroom.avalara.com:443,kernelsu.com:443,carpt.net:443,cmcc.cc.cd:443,cf.3666888.xyz:443,ex.warspite.dpdns.org:443,www.chess.com:443,api.gzcrtw.com:443,www.crazygames.fr:443,ys2046.cv:443,unpkg.com:443,www.dentoncounty.gov:443,elegantthemes.com:443,www.speedtest.net:443,dongbanghong.com:443,fonts.cdnfonts.com:443,journeys.com:443,hashi.sbs:443,cf.1o.ee:443,www.carousell.sg:443,appstorrent.ru:443,guide.for.edu.sg:443,videodelivery.net:443,de.102198.xyz:443,101yaoye.com:443,47bt.com:443,cdn.2x.nz:443,www.visa.com.sg:443,i.jpg.dog:443,mokeedev.com:443,www.udacity.com:443,easylist.to:443,liziye.pages.dev:443,www2.rarbggo.to:443,s.bookcdn.com:443,infinitemac.org:443,www.roche.com:443,spirol.com:443,cnllm.com:443,serviceshub.samsclub.com:443,bizclikmedia.com:443,cloudflare.tv:443,www.ventusky.com:443,cozylife.app:443,zoominfo.com:443,www.vmware.com:443,www.pixelexperience.org:443,www.zendesk.com:443,www.galgamex.net:443,mail.zrf.me:443,op.chinwa.eu.cc:443,cdn.violet.vin:443,registry.yarnpkg.com:443,app.rebase.tv:443",
+        "buyshoes.shop:443,hentaiverse.org:443,www.botafogo.com.br:443,duggal.com:443,ip.sb:443,spirol.com:443,cnllm.com:443,serviceshub.samsclub.com:443,bizclikmedia.com:443,cloudflare.tv:443,www.ventusky.com:443,cozylife.app:443,zoominfo.com:443,www.vmware.com:443,www.pixelexperience.org:443,www.zendesk.com:443,www.galgamex.net:443,mail.zrf.me:443,op.chinwa.eu.cc:443,cdn.violet.vin:443,registry.yarnpkg.com:443,app.rebase.tv:443",
     ).split(",")
     if h.strip()
 ]
@@ -524,7 +524,7 @@ def build_hosts_text(data):
 EDT_UUID = os.environ.get("EDT_UUID", "b652988d-9b0d-4795-88d2-2260947379c4")
 EDT_DOMAIN = os.environ.get("EDT_DOMAIN", "ad20.kldqx1223.workers.dev")
 EDT_FINGERPRINT = os.environ.get("EDT_FINGERPRINT", "chrome")
-SUB_URL = os.environ.get("SUB_URL", "https://jerylihub.github.io/gate/sub.txt")
+SUB_URL = os.environ.get("SUB_URL", "https://kldqx.github.io/naonao//sub.txt")
 
 
 def _b64_secret_encode(plaintext, secret):
